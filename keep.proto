@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+option go_package = ".;main";  // . = current dir, main = force package main
+
+message Packet {
+  bytes sig = 1;
+  bytes pk  = 2;
+  uint32 typ = 3;
+  string id  = 4;
+  string src = 5;
+  string dst = 6;
+  string body = 7;
+  uint64 fee = 8;
+  uint32 ttl = 9;
+  bytes scar = 10;
+}
