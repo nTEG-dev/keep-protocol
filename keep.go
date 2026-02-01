@@ -105,6 +105,7 @@ func handleConnection(c net.Conn) {
 			Body: "done",
 		}
 		b, _ := proto.Marshal(resp)
+		log.Printf("Reply to %s: id=%s body=%s", addr, resp.Id, resp.Body)
 		c.Write(b)
 	}
 }
