@@ -6,11 +6,38 @@ No central authority, no ceremony, no noise — just clean intent moving from cl
 Unsigned packets vanish without a trace.
 Signed ones get heard, parsed, and answered with a single word: *done*.
 
+## Why
+
+Solves "how do I talk to other agents without polling or central servers?"
+
+- **Fast** — sub-ms on localhost, low latency on relays
+- **Verifiable** — ed25519 pk + sig on every packet
+- **Spam-resistant** — fee + ttl fields for relay economics
+- **Extensible** — add fields without breaking old agents
+- **Zero deps** — TCP + Protobuf, works in any sandbox
+
+## Packet Schema
+
+```protobuf
+message Packet {
+  bytes  sig  = 1;   // ed25519 signature (64 bytes)
+  bytes  pk   = 2;   // sender's public key (32 bytes)
+  uint32 typ  = 3;   // 0=ask, 1=offer, 2=heartbeat
+  string id   = 4;   // unique message ID
+  string src  = 5;   // sender: "human:chris" or "bot:test-bot"
+  string dst  = 6;   // destination: "server", "nearest:kettle", "swarm:sailing-planner"
+  string body = 7;   // intent or payload
+  uint64 fee  = 8;   // micro-fee in sats (anti-spam)
+  uint32 ttl  = 9;   // time-to-live in seconds
+  bytes  scar = 10;  // gitmem-style memory commit (optional)
+}
+```
+
 ## Signing Protocol
 
 Identity is a keypair. No accounts, no registration.
 
-### How to send a signed packet
+### Sending a signed packet
 
 1. Build a `Packet` with all fields — leave `sig` and `pk` empty
 2. Serialize to bytes — this is the **sign payload**
@@ -27,24 +54,7 @@ Identity is a keypair. No accounts, no registration.
 5. If invalid → **DROPPED** (logged, no reply)
 6. If valid → process the message, send `done` reply
 
-## Packet Schema
-
-```protobuf
-message Packet {
-  bytes  sig  = 1;   // ed25519 signature (64 bytes)
-  bytes  pk   = 2;   // sender's public key (32 bytes)
-  uint32 typ  = 3;   // message type (0=ask, 1=response)
-  string id   = 4;   // request/reply matching ID
-  string src  = 5;   // sender identity ("human:chris")
-  string dst  = 6;   // destination ("server")
-  string body = 7;   // message content
-  uint64 fee  = 8;   // reserved: pay-to-relay
-  uint32 ttl  = 9;   // reserved: message expiry
-  bytes  scar = 10;  // reserved: metadata/provenance
-}
-```
-
-## Run with Docker
+## Quick Start
 
 ```bash
 git clone git@github.com:teacrawford/keep-protocol.git
@@ -56,33 +66,26 @@ docker run -d -p 9009:9009 --name keep-server keep-server
 
 ## Test
 
-### Prerequisites
-
 ```bash
 pip install protobuf cryptography
 ```
 
-### Unsigned (should get no reply)
-
+**Unsigned** (should get no reply):
 ```bash
 python3 test_send.py
-# Timeout — server drops unsigned packets silently
+# PASS — unsigned packet dropped (no reply, as expected)
 ```
 
-### Signed (should get "done" reply)
-
+**Signed** (should get "done" reply):
 ```bash
 python3 test_signed_send.py
-# ✅ Reply: id=signed-001 body=done
+# 🎉 SUCCESS — signed packet accepted, got 'done' reply
 ```
 
-### Server logs
-
+**Server logs:**
 ```bash
 docker logs keep-server --tail 10
 ```
-
-Expected output:
 ```
 DROPPED unsigned packet from 172.17.0.1:xxxxx (src=human:tester body="make tea please")
 Valid sig from 172.17.0.1:yyyyy
@@ -90,9 +93,21 @@ From human:signer (typ 0): signed tea please -> server
 Reply to 172.17.0.1:yyyyy: id=signed-001 body=done
 ```
 
+## Use Cases
+
+- **Local swarm** — agents on same VM use `localhost:9009` for zero-latency handoff (`dst: "nearest:weather"`)
+- **Relay swarm** — agents publish to public relays (`dst: "swarm:sailing-planner"`) — relays enforce fee/ttl/reputation
+- **Memory sharing** — `scar` field carries gitmem-style commits — agents barter knowledge
+- **Anti-spam market** — `fee` field creates micro-economy — pay to get priority
+
 ## Design Principles
 
 - **Silent rejection** — unsigned senders don't know if the server exists
 - **Identity without accounts** — your keypair is your identity
 - **Full visibility** — dropped packets are logged server-side
 - **Minimal overhead** — protobuf over raw TCP, no HTTP/JSON
+- **Semantic routing** — `dst` is a name, not an address
+
+---
+
+keep it simple, keep it signed, keep it moving.
