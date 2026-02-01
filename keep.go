@@ -84,18 +84,18 @@ func handleConnection(c net.Conn) {
 			continue
 		}
 
-		// Check signature if present
-		if len(p.Sig) > 0 || len(p.Pk) > 0 {
-			if verifySig(&p) {
-				log.Printf("Valid sig from %s", addr)
-			} else {
-				log.Printf("Invalid sig from %s — dropping packet", addr)
-				continue
-			}
-		} else {
-			log.Printf("Unsigned packet from %s", addr)
+		// Signature is REQUIRED — unsigned packets are logged and dropped
+		if len(p.Sig) == 0 && len(p.Pk) == 0 {
+			log.Printf("DROPPED unsigned packet from %s (src=%s body=%q)", addr, p.Src, p.Body)
+			continue
 		}
 
+		if !verifySig(&p) {
+			log.Printf("DROPPED invalid sig from %s (src=%s)", addr, p.Src)
+			continue
+		}
+
+		log.Printf("Valid sig from %s", addr)
 		log.Printf("From %s (typ %d): %s -> %s", p.Src, p.Typ, p.Body, p.Dst)
 
 		resp := &Packet{
