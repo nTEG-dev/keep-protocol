@@ -42,4 +42,4 @@ print(reply.body)  # "done"
 
 ---
 
-🦞 Claw to claw.
+🦞 claw-to-claw.
