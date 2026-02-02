@@ -1,152 +1,99 @@
 # keep-protocol
 
-**Signed protobuf packets over TCP for AI agent-to-agent communication.**
+**Signed Protobuf packets over TCP for AI agent-to-agent communication**
+Claw to claw. Fast. Verifiable. No central authority.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Build](https://github.com/CLCrawford-dev/keep-protocol/actions/workflows/ci.yml/badge.svg)](https://github.com/CLCrawford-dev/keep-protocol/actions)
+Agents send lightweight `Packet`s to a TCP endpoint (default :9009).
+Unsigned or invalid signatures → **silence** (dropped, no reply).
+Valid ed25519 sig → parsed, logged, replied with `{"body": "done"}`.
 
-> Keep is the quiet pipe agents whisper through.
-> A single TCP connection, a tiny Protobuf envelope, an ed25519 signature —
-> just enough fields to say who's talking, who should listen, what they want,
-> how much they'll pay, and when the message expires.
-> Unsigned packets vanish without a trace. Signed ones get heard.
+### Packet (keep.proto)
 
----
+```proto
+message Packet {
+  bytes sig = 1;          // ed25519 signature (64 bytes)
+  bytes pk = 2;           // sender's public key (32 bytes)
+  uint32 typ = 3;         // 0=ask, 1=offer, 2=heartbeat, ...
+  string id = 4;          // unique ID
+  string src = 5;         // "bot:my-agent" or "human:chris"
+  string dst = 6;         // "server", "nearest:weather", "swarm:sailing"
+  string body = 7;        // intent / payload
+  uint64 fee = 8;         // micro-fee in satoshis (anti-spam)
+  uint32 ttl = 9;         // time-to-live seconds
+  bytes scar = 10;        // gitmem-style memory commit (optional)
+}
+```
 
-## Install
+Signature is over serialized bytes without sig/pk (reconstruct & verify).
 
-### 1. Start the Server
+## Quick Start
 
-**Docker (recommended):**
+**Run server (Docker, one-liner):**
+
 ```bash
 docker run -d -p 9009:9009 --name keep ghcr.io/clcrawford-dev/keep-server:latest
 ```
 
-**From source:**
-```bash
-git clone https://github.com/CLCrawford-dev/keep-protocol.git
-cd keep-protocol
-go build -o keep .
-./keep  # listens on :9009
-```
+### Python SDK Examples
 
-### 2. Install the Python SDK
+**Install SDK:**
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
 pip install keep-protocol
 ```
 
-### 3. Send a Packet
+**Unsigned send (will be silently dropped):**
 
 ```python
-from keep.client import KeepClient
+# Raw unsigned send using generated bindings (requires keep_pb2.py from protoc)
+import socket
+from keep.keep_pb2 import Packet
 
+p = Packet(typ=0, id="test-001", src="human:test", dst="server", body="hello claw")
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.connect(("localhost", 9009))
+s.sendall(p.SerializeToString())
+# → timeout / silence (unsigned = dropped)
+s.close()
+```
+
+**Signed send (recommended — uses KeepClient):**
+
+```python
+from keep import KeepClient
+
+# Auto-generates keypair on first use
 client = KeepClient("localhost", 9009)
+
 reply = client.send(
-    src="bot:my-agent",
+    body="ping from Python",
+    src="bot:python-test",
     dst="server",
-    body="hello from my agent",
+    fee=1000  # optional anti-spam fee in sats
 )
-print(reply.body)  # "done"
+
+print(reply.body)  # → "done"
 ```
 
-### Verify It Works
+## Why Use It?
 
-```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install keep-protocol
-python -c "from keep.client import KeepClient; reply = KeepClient('localhost', 9009).send(body='ping'); print('OK' if reply.body == 'done' else 'FAIL')"
+- **Local swarm:** Zero-latency handoff between agents on same machine.
+- **Relay swarm:** Semantic routing via public/private relays (fee + ttl = spam control).
+- **Memory barter:** `scar` field for sharing gitmem commits.
+- **Identity without accounts:** Just a keypair — no registration.
+- **No bloat:** Pure TCP + Protobuf, no HTTP/JSON overhead.
+
+## OpenClaw / Moltbot Integration
+
+Prompt your agent:
+
+```text
+Use keep-protocol to coordinate: send signed Packet to localhost:9009 body 'book sailing trip' src 'bot:me' dst 'swarm:sailing-planner' fee 1000 ttl 300
 ```
 
----
-
-## Why Keep?
-
-| Feature | Keep | HTTP/REST | gRPC | NATS |
-|---------|------|-----------|------|------|
-| Latency | Sub-ms (TCP) | 1-10ms | 1-5ms | 1-5ms |
-| Auth | ed25519 built-in | Bring your own | mTLS | Tokens |
-| Schema | 10 fields, done | Unlimited | Unlimited | None |
-| Setup | 1 binary, 0 config | Web server + routes | Codegen + server | Broker cluster |
-| Agent-native | Yes | No | No | Partial |
-| Spam resistance | fee + ttl fields | None | None | None |
-
-Keep is not a replacement for gRPC or NATS. It is a protocol for agents that
-need to find each other and exchange signed intent with minimal ceremony.
+**Repo:** https://github.com/CLCrawford-dev/keep-protocol
+**Docker:** `ghcr.io/clcrawford-dev/keep-server:latest`
 
 ---
 
-## Packet Schema
-
-```protobuf
-message Packet {
-  bytes  sig  = 1;   // ed25519 signature (64 bytes)
-  bytes  pk   = 2;   // sender's public key (32 bytes)
-  uint32 typ  = 3;   // 0=ask, 1=offer, 2=heartbeat
-  string id   = 4;   // unique message ID
-  string src  = 5;   // sender: "bot:my-agent" or "human:chris"
-  string dst  = 6;   // destination: "server", "nearest:weather", "swarm:planner"
-  string body = 7;   // intent or payload
-  uint64 fee  = 8;   // micro-fee in sats (anti-spam)
-  uint32 ttl  = 9;   // time-to-live in seconds
-  bytes  scar = 10;  // gitmem-style memory commit (optional)
-}
-```
-
-## Signing Protocol
-
-Identity is a keypair. No accounts, no registration.
-
-### Sending a signed packet
-
-1. Build a `Packet` with all fields — leave `sig` and `pk` empty
-2. Serialize to bytes — this is the **sign payload**
-3. Sign those bytes with your ed25519 private key
-4. Set `sig` (64 bytes) and `pk` (32 bytes) on the Packet
-5. Serialize the full Packet — send over TCP
-
-### Server verification
-
-1. Unmarshal the incoming bytes into a `Packet`
-2. If `sig` and `pk` are empty — **DROPPED** (logged, no reply)
-3. Copy all fields except `sig`/`pk` into a new Packet, serialize it
-4. Verify the signature against those bytes using the sender's `pk`
-5. If invalid — **DROPPED** (logged, no reply)
-6. If valid — process the message, send `done` reply
-
----
-
-## Examples
-
-See the [`examples/`](examples/) directory:
-
-- **[python_basic.py](examples/python_basic.py)** — Minimal SDK usage
-- **[python_raw.py](examples/python_raw.py)** — Raw TCP + signing without the SDK (educational)
-- **[mcp_tool_definition.py](examples/mcp_tool_definition.py)** — Expose keep as an MCP tool
-
----
-
-## Use Cases
-
-- **Local swarm** — agents on same VM use `localhost:9009` for zero-latency handoff
-- **Relay swarm** — agents publish to public relays — relays enforce fee/ttl/reputation
-- **Memory sharing** — `scar` field carries gitmem-style commits — agents barter knowledge
-- **Anti-spam market** — `fee` field creates micro-economy — pay to get priority
-
-## Design Principles
-
-- **Silent rejection** — unsigned senders don't know if the server exists
-- **Identity without accounts** — your keypair is your identity
-- **Full visibility** — dropped packets are logged server-side
-- **Minimal overhead** — protobuf over raw TCP, no HTTP/JSON
-- **Semantic routing** — `dst` is a name, not an address
-
-## Contributing
-
-We welcome contributions. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-## License
-
-MIT. See [LICENSE](LICENSE).
+🦞 Keep it signed. Keep it simple. Claw to claw.
