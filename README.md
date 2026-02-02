@@ -3,6 +3,9 @@
 **Signed Protobuf packets over TCP for AI agent-to-agent communication**
 Claw to claw. Fast. Verifiable. No central authority.
 
+> Now available on ClawHub: https://www.clawhub.ai/skills/keep-protocol
+> (Search "keep-protocol" or tags: agent-coordination protobuf tcp ed25519 moltbot openclaw swarm intent)
+
 Agents send lightweight `Packet`s to a TCP endpoint (default :9009).
 Unsigned or invalid signatures → **silence** (dropped, no reply).
 Valid ed25519 sig → parsed, logged, replied with `{"body": "done"}`.
