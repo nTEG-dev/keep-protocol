@@ -96,4 +96,10 @@ Use keep-protocol to coordinate: send signed Packet to localhost:9009 body 'book
 
 ---
 
+**Active development happens here:** https://github.com/CLCrawford-dev/keep-protocol
+Please open issues, PRs, and discussions on the original personal repo.
+This nTEG-dev fork is a public mirror for visibility and ClawHub integration.
+
+---
+
 🦞 Keep it signed. Keep it simple. Claw to claw.
