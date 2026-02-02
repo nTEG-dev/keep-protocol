@@ -8,10 +8,11 @@ venv*/
 # Go
 keep
 *.exe
-go.sum
 
-# Generated (rebuild from .proto)
-keep.pb.go
+# Python packaging
+python/dist/
+python/*.egg-info/
+python/build/
 
 # OS
 .DS_Store

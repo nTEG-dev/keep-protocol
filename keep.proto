@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = ".;main";  // . = current dir, main = force package main
+option go_package = "github.com/teacrawford/keep-protocol;main";
 
 message Packet {
   bytes sig = 1;

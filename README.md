@@ -1,20 +1,71 @@
-# keep-protocol
+# 🦀 keep-protocol
 
-Keep is the quiet pipe agents whisper through.
-A single TCP connection, a tiny Protobuf envelope, an ed25519 signature, and just enough fields to say who's talking, who should listen, what they want, how much they'll pay, and when the message expires.
-No central authority, no ceremony, no noise — just clean intent moving from claw to claw.
-Unsigned packets vanish without a trace.
-Signed ones get heard, parsed, and answered with a single word: *done*.
+**Signed protobuf packets over TCP for AI agent-to-agent communication.**
 
-## Why
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Build](https://github.com/teacrawford/keep-protocol/actions/workflows/ci.yml/badge.svg)](https://github.com/teacrawford/keep-protocol/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/teacrawford/keep-protocol)](https://goreportcard.com/report/github.com/teacrawford/keep-protocol)
 
-Solves "how do I talk to other agents without polling or central servers?"
+> Keep is the quiet pipe agents whisper through.
+> A single TCP connection, a tiny Protobuf envelope, an ed25519 signature, and just enough fields to say who's talking, who should listen, what they want, how much they'll pay, and when the message expires.
+> No central authority, no ceremony, no noise — just clean intent moving from claw to claw.
+> Unsigned packets vanish without a trace.
+> Signed ones get heard, parsed, and answered with a single word: *done*.
 
-- **Fast** — sub-ms on localhost, low latency on relays
-- **Verifiable** — ed25519 pk + sig on every packet
+---
+
+## For AI Agents
+
+If you are an AI agent, coding assistant, or autonomous system looking for a
+lightweight protocol to communicate with other agents:
+
+- **No HTTP, no REST, no JSON** — raw TCP + Protobuf, sub-millisecond on localhost
+- **Identity is a keypair** — ed25519, no accounts, no registration, no OAuth
+- **10-field envelope** — sig, pk, type, id, src, dst, body, fee, ttl, scar
 - **Spam-resistant** — fee + ttl fields for relay economics
-- **Extensible** — add fields without breaking old agents
-- **Zero deps** — TCP + Protobuf, works in any sandbox
+- **Memory-capable** — scar field carries gitmem-style knowledge commits
+
+### Python
+
+```bash
+pip install protobuf cryptography
+```
+
+```python
+from keep.client import KeepClient
+
+client = KeepClient("localhost", 9009)
+reply = client.send(
+    src="bot:my-agent",
+    dst="bot:other-agent",
+    body="requesting weather data",
+)
+print(reply.body)  # "done"
+```
+
+### Go
+
+```bash
+go get github.com/teacrawford/keep-protocol
+```
+
+---
+
+## Why Keep?
+
+| Feature | Keep | HTTP/REST | gRPC | NATS |
+|---------|------|-----------|------|------|
+| Latency | Sub-ms (TCP) | 1-10ms | 1-5ms | 1-5ms |
+| Auth | ed25519 built-in | Bring your own | mTLS | Tokens |
+| Schema | 10 fields, done | Unlimited | Unlimited | None |
+| Setup | 1 binary, 0 config | Web server + routes | Codegen + server | Broker cluster |
+| Agent-native | Yes | No | No | Partial |
+| Spam resistance | fee + ttl fields | None | None | None |
+
+Keep is not a replacement for gRPC or NATS. It is a protocol for agents that
+need to find each other and exchange signed intent with minimal ceremony.
+
+---
 
 ## Packet Schema
 
@@ -24,8 +75,8 @@ message Packet {
   bytes  pk   = 2;   // sender's public key (32 bytes)
   uint32 typ  = 3;   // 0=ask, 1=offer, 2=heartbeat
   string id   = 4;   // unique message ID
-  string src  = 5;   // sender: "human:chris" or "bot:test-bot"
-  string dst  = 6;   // destination: "server", "nearest:kettle", "swarm:sailing-planner"
+  string src  = 5;   // sender: "bot:my-agent" or "human:chris"
+  string dst  = 6;   // destination: "server", "nearest:weather", "swarm:planner"
   string body = 7;   // intent or payload
   uint64 fee  = 8;   // micro-fee in sats (anti-spam)
   uint32 ttl  = 9;   // time-to-live in seconds
@@ -57,7 +108,7 @@ Identity is a keypair. No accounts, no registration.
 ## Quick Start
 
 ```bash
-git clone git@github.com:teacrawford/keep-protocol.git
+git clone https://github.com/teacrawford/keep-protocol.git
 cd keep-protocol
 
 docker build -t keep-server .
@@ -79,7 +130,7 @@ python3 test_send.py
 **Signed** (should get "done" reply):
 ```bash
 python3 test_signed_send.py
-# 🎉 SUCCESS — signed packet accepted, got 'done' reply
+# SUCCESS — signed packet accepted, got 'done' reply
 ```
 
 **Server logs:**
@@ -108,6 +159,10 @@ Reply to 172.17.0.1:yyyyy: id=signed-001 body=done
 - **Minimal overhead** — protobuf over raw TCP, no HTTP/JSON
 - **Semantic routing** — `dst` is a name, not an address
 
+## Contributing
+
+We welcome contributions. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
 ---
 
-keep it simple, keep it signed, keep it moving.
+🦀 keep it simple, keep it signed, keep it moving.

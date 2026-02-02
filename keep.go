@@ -6,18 +6,23 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	"google.golang.org/protobuf/proto"
 )
 
-var connections = make(map[string]net.Conn)
+var (
+	connections = make(map[string]net.Conn)
+	connMu      sync.Mutex
+)
 
 func heartbeat() {
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
+		connMu.Lock()
 		for addr, conn := range connections {
 			if _, err := conn.Write([]byte{2}); err != nil {
 				log.Printf("Heartbeat fail %s: %v", addr, err)
@@ -25,6 +30,7 @@ func heartbeat() {
 				delete(connections, addr)
 			}
 		}
+		connMu.Unlock()
 	}
 }
 
@@ -68,8 +74,14 @@ func verifySig(p *Packet) bool {
 func handleConnection(c net.Conn) {
 	defer c.Close()
 	addr := c.RemoteAddr().String()
+	connMu.Lock()
 	connections[addr] = c
-	defer delete(connections, addr)
+	connMu.Unlock()
+	defer func() {
+		connMu.Lock()
+		delete(connections, addr)
+		connMu.Unlock()
+	}()
 
 	buf := make([]byte, 4096)
 	for {
