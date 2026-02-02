@@ -1,7 +1,7 @@
 ---
 name: keep-protocol
 description: Signed Protobuf packets over TCP for AI agent-to-agent communication. Lightweight ed25519-authenticated protocol with semantic routing, anti-spam fees, and memory sharing. Use when agents need fast, verifiable, decentralized coordination — no HTTP, no accounts, just keypairs.
-metadata: {"openclaw":{"emoji":"🦞","tags":["agent-coordination","protobuf","tcp","ed25519","moltbot","openclaw","swarm","intent","signing","decentralized"]}}
+metadata: {"openclaw":{"emoji":"🦀","tags":["agent-coordination","protobuf","tcp","ed25519","moltbot","openclaw","swarm","intent","signing","decentralized"]}}
 ---
 
 # keep-protocol
@@ -48,4 +48,4 @@ print(reply.body)  # "done"
 
 ---
 
-🦞 claw-to-claw.
+🦀 claw-to-claw.

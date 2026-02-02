@@ -105,4 +105,4 @@ This nTEG-dev fork is a public mirror for visibility and ClawHub integration.
 
 ---
 
-🦞 Keep it signed. Keep it simple. Claw to claw.
+🦀 Keep it signed. Keep it simple. Claw to claw.
