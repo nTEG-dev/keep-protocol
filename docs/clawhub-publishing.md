@@ -2,6 +2,75 @@
 
 How to update the `keep-protocol` skill listing on [ClawHub](https://www.clawhub.ai/skills/keep-protocol) after code changes.
 
+## Repository Architecture
+
+> **⛔ CRITICAL: ALL changes go through staging first. NEVER push directly to origin.**
+
+| Remote | Repo | Purpose |
+|--------|------|---------|
+| `staging` | CLCrawford-dev/keep-protocol-dev | **Private staging** — test here first |
+| `origin` | CLCrawford-dev/keep-protocol | **Main development** — only after staging verified |
+| `nteg` | nTEG-dev/keep-protocol | **Public mirror** — sync after releases |
+
+```bash
+# Check your remotes
+git remote -v
+
+# If missing, add them:
+git remote add staging https://github.com/CLCrawford-dev/keep-protocol-dev.git
+git remote add nteg https://github.com/nTEG-dev/keep-protocol.git
+```
+
+## Development Workflow
+
+### 1. Feature Development (ALWAYS start here)
+
+```bash
+# Create feature branch
+git checkout -b feature/kp-XX-description
+
+# Make changes, commit locally
+git add .
+git commit -m "feat: description (KP-XX)"
+
+# Push to STAGING first — NEVER to origin
+git push staging feature/kp-XX-description
+```
+
+### 2. Test on Staging
+
+- Run tests against staging branch
+- Verify functionality works as expected
+- Get human approval if needed
+
+### 3. Merge to Staging Main
+
+```bash
+# On staging repo, merge feature branch to main
+git checkout main
+git merge feature/kp-XX-description
+git push staging main
+```
+
+### 4. Final Verification on Staging
+
+- All tests pass on staging
+- Manual verification complete
+- Ready for production
+
+### 5. Push to Origin (Production)
+
+```bash
+# Only after staging is verified
+git push origin main
+```
+
+### 6. Follow Release Checklist (below)
+
+Tag, CI, artifacts, ClawHub publish.
+
+---
+
 ## Prerequisites
 
 - Node.js / npm (for `npx`)
@@ -79,18 +148,39 @@ Allowed frontmatter keys: `name`, `description`, `license`, `allowed-tools`, `me
 
 ## Full Update Checklist
 
-> **⛔ STOP: DO NOT publish to ClawHub until CI is GREEN.**
+> **⛔ STOP: DO NOT push to origin or publish to ClawHub until STAGING is verified.**
 >
-> Publishing before CI passes exposes users to broken artifacts.
+> Publishing before testing exposes users to broken artifacts.
 > This happened on v1.0.2/v0.3.0 — don't repeat it.
 
+### Phase 1: Staging (MANDATORY)
+
 ```
-☐ 1. Code changes committed and pushed to CLCrawford-dev/keep-protocol
-☐ 2. SKILL.md updated if description/tags/instructions changed
-☐ 3. Create and push version tag:
+☐ 1. Feature branch created from main
+☐ 2. Code changes committed locally
+☐ 3. Push to STAGING remote (NOT origin):
+       git push staging feature/kp-XX-description
+☐ 4. Test on staging:
+       - Unit tests pass
+       - Integration tests pass
+       - Manual verification complete
+☐ 5. Merge to staging main:
+       git checkout main
+       git merge feature/kp-XX-description
+       git push staging main
+☐ 6. Final staging verification complete
+```
+
+### Phase 2: Production
+
+```
+☐ 7. Push verified code to origin:
+       git push origin main
+☐ 8. SKILL.md updated if description/tags/instructions changed
+☐ 9. Create and push version tag:
        git tag vX.Y.Z
        git push origin vX.Y.Z
-☐ 4. WAIT for CI to complete — ALL JOBS MUST BE GREEN
+☐ 10. WAIT for CI to complete — ALL JOBS MUST BE GREEN
        https://github.com/CLCrawford-dev/keep-protocol/actions
        ☐ build-go ✓
        ☐ test-python ✓
@@ -98,10 +188,10 @@ Allowed frontmatter keys: `name`, `description`, `license`, `allowed-tools`, `me
        ☐ build-sdist ✓
        ☐ publish-pypi ✓
        ☐ publish-ghcr ✓
-☐ 5. VERIFY artifacts exist:
+☐ 11. VERIFY artifacts exist:
        - ghcr.io: docker pull ghcr.io/clcrawford-dev/keep-server:X.Y.Z
        - PyPI: pip install keep-protocol==X.Y.Z
-☐ 6. TEST in clean sandbox (what a new user experiences):
+☐ 12. TEST in clean sandbox (what a new user experiences):
        python3 -m venv /tmp/keep-test-sandbox
        source /tmp/keep-test-sandbox/bin/activate
        pip install keep-protocol
@@ -116,18 +206,37 @@ Allowed frontmatter keys: `name`, `description`, `license`, `allowed-tools`, `me
        # Must see valid version and server response
        deactivate
        rm -rf /tmp/keep-test-sandbox
-☐ 7. ONLY THEN publish to ClawHub with matching version
-☐ 8. Verify on clawhub.ai/skills/keep-protocol
 ```
 
-## Push to Both Repos
+### Phase 3: Public Release
 
-The repo has two remotes:
+```
+☐ 13. Publish to ClawHub with matching version
+☐ 14. Verify on clawhub.ai/skills/keep-protocol
+☐ 15. Sync to public mirror:
+       git push nteg main
+       git push nteg vX.Y.Z
+```
+
+## Push to All Remotes
+
+The repo has three remotes — use them in order:
 
 ```bash
-git push origin main   # CLCrawford-dev (primary)
-git push nteg main     # nTEG-dev (mirror/fork)
+# 1. STAGING (always first for new work)
+git push staging feature/branch   # Test here first
+git push staging main             # After feature verified
+
+# 2. ORIGIN (only after staging verified)
+git push origin main              # CLCrawford-dev (primary)
+git push origin vX.Y.Z            # Push tags after CI
+
+# 3. PUBLIC MIRROR (only after release complete)
+git push nteg main                # nTEG-dev (public mirror)
+git push nteg vX.Y.Z              # Sync tags
 ```
+
+**Never skip staging. Never push directly to origin without staging verification.**
 
 ## Version History
 
