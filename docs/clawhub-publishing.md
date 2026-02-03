@@ -79,11 +79,18 @@ Allowed frontmatter keys: `name`, `description`, `license`, `allowed-tools`, `me
 
 ## Full Update Checklist
 
+**Order matters!** Tag triggers CI which publishes Docker/PyPI. ClawHub comes last so users have working artifacts.
+
 ```
 ☐ Code changes committed and pushed to CLCrawford-dev/keep-protocol
 ☐ SKILL.md updated if description/tags/instructions changed
-☐ Both repos synced (origin + nteg remote)
-☐ ClawHub publish with bumped version
+☐ Create and push version tag:
+    git tag vX.Y.Z
+    git push origin vX.Y.Z
+☐ Wait for CI to complete (https://github.com/CLCrawford-dev/keep-protocol/actions)
+    - Docker image published to ghcr.io
+    - Python package published to PyPI
+☐ ClawHub publish with matching version
 ☐ Verified on clawhub.ai/skills/keep-protocol
 ```
 
@@ -98,10 +105,11 @@ git push nteg main     # nTEG-dev (mirror/fork)
 
 ## Version History
 
-| Version | Date       | Changes |
-|---------|------------|---------|
-| 1.0.0   | 2026-02-02 | Initial publish (missing description/tags) |
-| 1.0.1   | 2026-02-02 | Added YAML frontmatter: description, 🦀 emoji, discovery tags |
+| Version | Date       | Git Tag | Changes |
+|---------|------------|---------|---------|
+| 1.0.0   | 2026-02-02 | v0.1.0  | Initial publish (missing description/tags) |
+| 1.0.1   | 2026-02-02 | v0.1.1  | Added YAML frontmatter: description, 🦀 emoji, discovery tags |
+| 1.0.2   | 2026-02-03 | v0.3.0  | Discovery (info/agents/stats), endpoint caching, scar logging, agent-to-agent routing, persistent connections |
 
 ## Troubleshooting
 
