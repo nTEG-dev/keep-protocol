@@ -7,6 +7,7 @@ the signing protocol at the byte level.
 
 import os
 import socket
+import struct
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
@@ -37,14 +38,32 @@ p.sig = sig_bytes
 p.pk = pk_bytes
 wire_data = p.SerializeToString()
 
-# 6. Send over TCP
+# 6. Send over TCP with length-prefixed framing
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.settimeout(10)
 s.connect(("localhost", 9009))
-s.sendall(wire_data)
 
-# 7. Read reply
-reply_data = s.recv(4096)
+# Frame: [4 bytes BE length][protobuf payload]
+header = struct.pack(">I", len(wire_data))
+s.sendall(header + wire_data)
+
+
+# 7. Read framed reply
+def recv_exact(sock, n):
+    """Read exactly n bytes."""
+    chunks = []
+    while n > 0:
+        chunk = sock.recv(min(n, 4096))
+        if not chunk:
+            raise ConnectionError("Connection closed unexpectedly")
+        chunks.append(chunk)
+        n -= len(chunk)
+    return b"".join(chunks)
+
+
+reply_header = recv_exact(s, 4)
+(reply_len,) = struct.unpack(">I", reply_header)
+reply_data = recv_exact(s, reply_len)
 s.close()
 
 resp = keep_pb2.Packet()

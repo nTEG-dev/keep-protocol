@@ -1,12 +1,15 @@
 """Keep protocol client -- sign and send packets over TCP."""
 
 import socket
+import struct
 import uuid
 from typing import Optional
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from keep import keep_pb2
+
+MAX_PACKET_SIZE = 65536
 
 
 class KeepClient:
@@ -29,6 +32,40 @@ class KeepClient:
         self._private_key = private_key or Ed25519PrivateKey.generate()
         self._public_key = self._private_key.public_key()
         self._pk_bytes = self._public_key.public_bytes_raw()
+
+    @staticmethod
+    def _recv_exact(sock: socket.socket, n: int) -> bytes:
+        """Read exactly n bytes from sock."""
+        chunks = []
+        remaining = n
+        while remaining > 0:
+            chunk = sock.recv(min(remaining, 4096))
+            if not chunk:
+                raise ConnectionError(
+                    f"Connection closed: expected {n} bytes, got {n - remaining}"
+                )
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        return b"".join(chunks)
+
+    @staticmethod
+    def _send_framed(sock: socket.socket, data: bytes) -> None:
+        """Send data with a 4-byte big-endian length prefix."""
+        if len(data) > MAX_PACKET_SIZE:
+            raise ValueError(f"Packet too large: {len(data)} > {MAX_PACKET_SIZE}")
+        header = struct.pack(">I", len(data))
+        sock.sendall(header + data)
+
+    @classmethod
+    def _recv_framed(cls, sock: socket.socket) -> bytes:
+        """Read a length-prefixed frame: 4-byte BE header + payload."""
+        header = cls._recv_exact(sock, 4)
+        (msg_len,) = struct.unpack(">I", header)
+        if msg_len == 0:
+            raise ConnectionError("Received zero-length frame")
+        if msg_len > MAX_PACKET_SIZE:
+            raise ConnectionError(f"Frame too large: {msg_len} > {MAX_PACKET_SIZE}")
+        return cls._recv_exact(sock, msg_len)
 
     def send(
         self,
@@ -69,8 +106,8 @@ class KeepClient:
         s.settimeout(self.timeout)
         try:
             s.connect((self.host, self.port))
-            s.sendall(wire_data)
-            reply_data = s.recv(4096)
+            self._send_framed(s, wire_data)
+            reply_data = self._recv_framed(s)
         finally:
             s.close()
 

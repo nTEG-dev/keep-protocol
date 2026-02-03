@@ -35,8 +35,10 @@ import "github.com/teacrawford/keep-protocol"
 2. Serialize to bytes
 3. Sign those bytes with ed25519
 4. Set `sig` (64 bytes) and `pk` (32 bytes) on the Packet
-5. Serialize the full Packet and send over TCP to port 9009
-6. Read the reply (a `Packet` with `body: "done"`)
+5. Serialize the full Packet to get `wire_data`
+6. **Frame it:** prepend 4-byte big-endian uint32 of `len(wire_data)`
+7. Send `[4-byte header][wire_data]` over TCP to port 9009
+8. **Read reply frame:** read 4 bytes (length), then read that many bytes (protobuf Packet)
 
 ## Packet schema
 

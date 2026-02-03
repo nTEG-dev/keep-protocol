@@ -37,6 +37,18 @@ Signature is over serialized bytes without sig/pk (reconstruct & verify).
 docker run -d -p 9009:9009 --name keep ghcr.io/clcrawford-dev/keep-server:latest
 ```
 
+## Wire Format (v0.2.0+)
+
+Every message on the wire is length-prefixed:
+
+```
+[4 bytes: uint32 big-endian payload length][N bytes: protobuf Packet]
+```
+
+Maximum payload size: 65,536 bytes.
+
+**Breaking change from v0.1.x:** Raw protobuf writes are no longer accepted. All clients must use length-prefixed framing.
+
 ### Python SDK Examples
 
 **Install SDK:**
@@ -49,13 +61,14 @@ pip install keep-protocol
 
 ```python
 # Raw unsigned send using generated bindings (requires keep_pb2.py from protoc)
-import socket
+import socket, struct
 from keep.keep_pb2 import Packet
 
 p = Packet(typ=0, id="test-001", src="human:test", dst="server", body="hello claw")
+wire_data = p.SerializeToString()
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect(("localhost", 9009))
-s.sendall(p.SerializeToString())
+s.sendall(struct.pack(">I", len(wire_data)) + wire_data)
 # → timeout / silence (unsigned = dropped)
 s.close()
 ```
