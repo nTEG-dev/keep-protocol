@@ -1,8 +1,11 @@
 """Keep protocol client -- sign and send packets over TCP."""
 
+import json
 import socket
 import struct
 import uuid
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Callable, Optional
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -188,7 +191,7 @@ class KeepClient:
 
             should_wait = wait_reply
             if should_wait is None:
-                should_wait = dst in ("server", "")
+                should_wait = dst in ("server", "") or dst.startswith("discover:")
 
             if should_wait:
                 return self._read_packet(self._sock)
@@ -248,3 +251,128 @@ class KeepClient:
         finally:
             if timeout is not None:
                 self._sock.settimeout(self.timeout)
+
+    # -- Discovery --
+
+    def discover(self, query: str = "info") -> dict:
+        """Send a discovery query and return parsed JSON response.
+
+        Args:
+            query: Discovery type — "info", "agents", or "stats".
+
+        Returns:
+            Parsed JSON dict from the server's response body.
+        """
+        reply = self.send(body="", dst=f"discover:{query}")
+        return json.loads(reply.body)
+
+    def discover_agents(self) -> list:
+        """Return list of currently connected agent identities."""
+        info = self.discover("agents")
+        return info.get("agents", [])
+
+    # -- Endpoint caching --
+
+    _CACHE_DIR = Path.home() / ".keep"
+    _CACHE_FILE = _CACHE_DIR / "endpoints.json"
+
+    @staticmethod
+    def cache_endpoint(host: str, port: int, info: dict) -> None:
+        """Cache a discovered endpoint in ~/.keep/endpoints.json.
+
+        Args:
+            host: Server hostname or IP.
+            port: Server port.
+            info: Server info dict (from discover("info")).
+        """
+        cache_dir = Path.home() / ".keep"
+        cache_file = cache_dir / "endpoints.json"
+
+        # Load existing cache
+        endpoints = []
+        if cache_file.exists():
+            try:
+                data = json.loads(cache_file.read_text())
+                endpoints = data.get("endpoints", [])
+            except (json.JSONDecodeError, OSError):
+                endpoints = []
+
+        # Update or append
+        now = datetime.now(timezone.utc).isoformat()
+        entry = {
+            "host": host,
+            "port": port,
+            "version": info.get("version", ""),
+            "agents_online": info.get("agents_online", 0),
+            "last_seen": now,
+        }
+
+        updated = False
+        for i, ep in enumerate(endpoints):
+            if ep.get("host") == host and ep.get("port") == port:
+                endpoints[i] = entry
+                updated = True
+                break
+        if not updated:
+            endpoints.append(entry)
+
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(json.dumps({"endpoints": endpoints}, indent=2))
+
+    @classmethod
+    def from_cache(
+        cls,
+        src: str = "bot:keep-client",
+        private_key: Optional[Ed25519PrivateKey] = None,
+        timeout: float = 5.0,
+    ) -> "KeepClient":
+        """Create a client by trying cached endpoints.
+
+        Reads ~/.keep/endpoints.json and attempts to connect to each
+        endpoint in order, returning the first successful connection.
+
+        Args:
+            src: Agent identity for this client.
+            private_key: Optional ed25519 private key.
+            timeout: Connection timeout per endpoint attempt.
+
+        Returns:
+            A connected KeepClient instance.
+
+        Raises:
+            ConnectionError: If no cached endpoint is reachable.
+        """
+        cache_file = Path.home() / ".keep" / "endpoints.json"
+        if not cache_file.exists():
+            raise ConnectionError("No cached endpoints (~/.keep/endpoints.json not found)")
+
+        try:
+            data = json.loads(cache_file.read_text())
+            endpoints = data.get("endpoints", [])
+        except (json.JSONDecodeError, OSError) as e:
+            raise ConnectionError(f"Failed to read endpoint cache: {e}")
+
+        if not endpoints:
+            raise ConnectionError("Endpoint cache is empty")
+
+        last_error = None
+        for ep in endpoints:
+            host = ep.get("host", "localhost")
+            port = ep.get("port", 9009)
+            try:
+                client = cls(
+                    host=host,
+                    port=port,
+                    private_key=private_key,
+                    timeout=timeout,
+                    src=src,
+                )
+                # Test the connection
+                info = client.discover("info")
+                client.cache_endpoint(host, port, info)
+                return client
+            except (OSError, ConnectionError, json.JSONDecodeError) as e:
+                last_error = e
+                continue
+
+        raise ConnectionError(f"No cached endpoint reachable (last error: {last_error})")

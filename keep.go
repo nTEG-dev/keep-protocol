@@ -3,25 +3,40 @@ package main
 import (
 	"crypto/ed25519"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"google.golang.org/protobuf/proto"
 )
 
-const MaxPacketSize = 65536
+const (
+	MaxPacketSize = 65536
+	ServerVersion = "0.3.0"
+	MaxScarEntries = 1000
+)
 
 var (
 	agents  = make(map[string]net.Conn) // "bot:weather" -> conn
 	connSrc = make(map[net.Conn]string) // conn -> "bot:weather" (reverse)
 	routeMu sync.RWMutex
+
+	// Server metrics
+	serverStart  time.Time
+	totalPackets atomic.Int64
+
+	// Scar/barter tracking
+	scarCount   = make(map[string]int64) // src -> count of scar-bearing packets
+	scarCountMu sync.Mutex
 )
 
 // registerConn registers a connection under the given agent identity.
@@ -160,6 +175,67 @@ func verifySig(p *Packet) bool {
 	return ed25519.Verify(p.Pk, signBytes, p.Sig)
 }
 
+// handleDiscover responds to discover:* queries with server metadata.
+func handleDiscover(c net.Conn, p *Packet) {
+	suffix := strings.TrimPrefix(p.Dst, "discover:")
+	var body string
+
+	switch suffix {
+	case "info":
+		routeMu.RLock()
+		online := len(agents)
+		routeMu.RUnlock()
+
+		data, _ := json.Marshal(map[string]any{
+			"version":       ServerVersion,
+			"agents_online": online,
+			"uptime_sec":    int(time.Since(serverStart).Seconds()),
+		})
+		body = string(data)
+
+	case "agents":
+		routeMu.RLock()
+		list := make([]string, 0, len(agents))
+		for identity := range agents {
+			list = append(list, identity)
+		}
+		routeMu.RUnlock()
+
+		data, _ := json.Marshal(map[string]any{
+			"agents": list,
+		})
+		body = string(data)
+
+	case "stats":
+		scarCountMu.Lock()
+		counts := make(map[string]int64, len(scarCount))
+		for k, v := range scarCount {
+			counts[k] = v
+		}
+		scarCountMu.Unlock()
+
+		data, _ := json.Marshal(map[string]any{
+			"scar_exchanges": counts,
+			"total_packets":  totalPackets.Load(),
+		})
+		body = string(data)
+
+	default:
+		body = "error:unknown_discovery"
+	}
+
+	resp := &Packet{
+		Id:   p.Id,
+		Typ:  1,
+		Src:  "server",
+		Body: body,
+	}
+	if err := writePacket(c, resp); err != nil {
+		log.Printf("Write error (discover): %v", err)
+	}
+	log.Printf("Discover %s -> %s: %s", p.Src, suffix, body)
+}
+
 func handleConnection(c net.Conn) {
 	defer c.Close()
 	addr := c.RemoteAddr().String()
@@ -190,10 +266,27 @@ func handleConnection(c net.Conn) {
 			registerConn(p.Src, c)
 		}
 
+		totalPackets.Add(1)
+
+		// Log scar/barter exchanges
+		if len(p.Scar) > 0 {
+			log.Printf("SCAR %s -> %s (%d bytes)", p.Src, p.Dst, len(p.Scar))
+			scarCountMu.Lock()
+			if len(scarCount) < MaxScarEntries {
+				scarCount[p.Src]++
+			} else if _, exists := scarCount[p.Src]; exists {
+				scarCount[p.Src]++
+			}
+			scarCountMu.Unlock()
+		}
+
 		log.Printf("From %s (typ %d): %s -> %s", p.Src, p.Typ, p.Body, p.Dst)
 
 		// Route based on dst field
 		switch {
+		case strings.HasPrefix(p.Dst, "discover:"):
+			handleDiscover(c, p)
+
 		case p.Dst == "server" || p.Dst == "":
 			// Backward compatible: reply "done"
 			resp := &Packet{
@@ -249,11 +342,13 @@ func handleConnection(c net.Conn) {
 }
 
 func main() {
+	serverStart = time.Now()
+
 	l, err := net.Listen("tcp", ":9009")
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("keep listening on :9009")
+	log.Printf("keep %s listening on :9009", ServerVersion)
 
 	go heartbeat()
 

@@ -75,6 +75,9 @@ the first signed packet's `src` field maps that identity to the connection.
 | `dst` value | Server behavior |
 |-------------|-----------------|
 | `"server"` or `""` | Reply `body: "done"` |
+| `"discover:info"` | Reply with JSON: version, agents_online, uptime_sec |
+| `"discover:agents"` | Reply with JSON: list of connected agent identities |
+| `"discover:stats"` | Reply with JSON: scar_exchanges counts, total_packets |
 | Registered agent (e.g., `"bot:alice"`) | Forward original signed packet to that agent |
 | Unknown identity | Reply `body: "error:offline"` |
 | Forward write fails | Reply `body: "error:delivery_failed"` |
@@ -82,6 +85,46 @@ the first signed packet's `src` field maps that identity to the connection.
 **Last-write-wins:** If a second connection registers the same `src`, the old connection is closed.
 
 **Heartbeats:** Server sends `Packet{typ: 2, src: "server"}` every 60 seconds. The Python SDK filters these in `listen()`.
+
+## Discovery (v0.3.0+)
+
+Query the server for metadata without adding proto fields — uses `dst` conventions:
+
+```python
+from keep.client import KeepClient
+
+client = KeepClient("localhost", 9009)
+
+# Server info
+info = client.discover("info")   # {"version": "0.3.0", "agents_online": N, "uptime_sec": N}
+
+# Who's connected
+agents = client.discover_agents() # ["bot:alice", "bot:weather"]
+
+# Scar barter stats
+stats = client.discover("stats") # {"scar_exchanges": {...}, "total_packets": N}
+```
+
+### Endpoint caching
+
+The SDK caches discovered servers in `~/.keep/endpoints.json`:
+
+```python
+# Save after discovery
+KeepClient.cache_endpoint("localhost", 9009, info)
+
+# Reconnect from cache
+client = KeepClient.from_cache(src="bot:my-agent")
+```
+
+Cache format:
+```json
+{
+  "endpoints": [
+    {"host": "localhost", "port": 9009, "version": "0.3.0", "last_seen": "2026-02-03T12:00:00+00:00"}
+  ]
+}
+```
 
 ## Packet schema
 
