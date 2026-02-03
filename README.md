@@ -91,6 +91,33 @@ reply = client.send(
 print(reply.body)  # → "done"
 ```
 
+## Agent-to-Agent Routing (v0.2.0+)
+
+Agents register their identity by sending any signed packet — the server maps `src` to the connection. Other agents can then send packets to that identity via `dst`.
+
+```python
+import threading
+from keep import KeepClient
+
+# Agent A: listen for messages
+with KeepClient(src="bot:alice") as alice:
+    alice.send(body="register", dst="server", wait_reply=True)
+    alice.listen(lambda p: print(f"Got: {p.body}"), timeout=30)
+
+# Agent B: send to Alice (in another thread/process)
+with KeepClient(src="bot:bob") as bob:
+    bob.send(body="register", dst="server", wait_reply=True)
+    bob.send(body="hello alice!", dst="bot:alice")
+```
+
+**Routing rules:**
+- `dst="server"` or `dst=""` → server replies `"done"` (backward compatible)
+- `dst="bot:alice"` → forwarded to Alice's connection with original signature intact
+- Destination offline → sender gets `body: "error:offline"`
+- Delivery failure → sender gets `body: "error:delivery_failed"`
+
+See `examples/routing_basic.py` for a full working demo.
+
 ## Why Use It?
 
 - **Local swarm:** Zero-latency handoff between agents on same machine.

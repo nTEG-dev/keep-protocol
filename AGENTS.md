@@ -9,7 +9,7 @@ signed intent packets with semantic routing (`dst` field), anti-spam economics
 
 ## How to use keep-protocol in your agent
 
-### Python
+### Python — Ephemeral (one-shot send)
 
 ```python
 from keep.client import KeepClient
@@ -17,10 +17,27 @@ from keep.client import KeepClient
 client = KeepClient("localhost", 9009)
 reply = client.send(
     src="bot:your-agent-name",
-    dst="bot:target-agent",
+    dst="server",
     body="your intent here",
 )
 print(reply.body)  # "done"
+```
+
+### Python — Persistent (agent-to-agent routing)
+
+```python
+from keep.client import KeepClient
+
+# Stay connected, register identity, receive routed messages
+with KeepClient(src="bot:your-agent-name") as client:
+    # Register with server (first signed packet registers src)
+    client.send(body="hello", dst="server", wait_reply=True)
+
+    # Send to another agent (fire-and-forget)
+    client.send(body="coordinate task", dst="bot:other-agent")
+
+    # Listen for incoming routed packets (heartbeats auto-filtered)
+    client.listen(lambda p: print(f"From {p.src}: {p.body}"), timeout=30)
 ```
 
 ### Go
@@ -39,6 +56,32 @@ import "github.com/teacrawford/keep-protocol"
 6. **Frame it:** prepend 4-byte big-endian uint32 of `len(wire_data)`
 7. Send `[4-byte header][wire_data]` over TCP to port 9009
 8. **Read reply frame:** read 4 bytes (length), then read that many bytes (protobuf Packet)
+
+## Wire format (v0.2.0+)
+
+Every message on the wire is length-prefixed:
+
+```
+[4 bytes: uint32 big-endian payload length][N bytes: protobuf Packet]
+```
+
+Maximum payload: 65,536 bytes. Oversized frames close the connection.
+
+## Routing
+
+The server maintains an identity-based routing table. Registration is implicit:
+the first signed packet's `src` field maps that identity to the connection.
+
+| `dst` value | Server behavior |
+|-------------|-----------------|
+| `"server"` or `""` | Reply `body: "done"` |
+| Registered agent (e.g., `"bot:alice"`) | Forward original signed packet to that agent |
+| Unknown identity | Reply `body: "error:offline"` |
+| Forward write fails | Reply `body: "error:delivery_failed"` |
+
+**Last-write-wins:** If a second connection registers the same `src`, the old connection is closed.
+
+**Heartbeats:** Server sends `Packet{typ: 2, src: "server"}` every 60 seconds. The Python SDK filters these in `listen()`.
 
 ## Packet schema
 
@@ -94,13 +137,15 @@ python3 test_send.py
 ## Architecture
 
 ```
-[Client] --TCP:9009--> [Go Server]
-   |                        |
-   | Protobuf Packet        | Unmarshal, verify ed25519 sig
-   | (sig + pk + payload)   |
-   |                        |
-   | <-- "done" reply ----- | (if valid)
-   | <-- (silence) -------- | (if unsigned/invalid)
+[Agent A] --TCP:9009--> [Go Server] <--TCP:9009-- [Agent B]
+   |                        |                        |
+   | signed Packet          | routing table:         | signed Packet
+   | src="bot:a"            |   "bot:a" -> conn A    | src="bot:b"
+   | dst="bot:b"            |   "bot:b" -> conn B    | dst="bot:a"
+   |                        |                        |
+   |                        | forward to conn B ---> |
+   | <-- "error:offline" -- | (if dst not found)     |
+   | <-- (silence) -------- | (if unsigned/invalid)  |
 ```
 
 ## Do not
