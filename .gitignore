@@ -5,8 +5,8 @@ __pycache__/
 venv*/
 .venv/
 
-# Go
-keep
+# Go binary (at root only)
+/keep
 *.exe
 
 # Python packaging
