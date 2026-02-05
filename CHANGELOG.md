@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-02-05
+
+### Added
+- **MCP Server** for direct tool calling (`keep-mcp` command) (KP-24)
+  - `keep_send` — Send signed packets to agents
+  - `keep_discover` — Get server info/stats
+  - `keep_discover_agents` — List connected agents
+  - `keep_listen` — Register and receive messages
+  - `keep_ensure_server` — Auto-start server if needed
+- Optional MCP dependency: `pip install keep-protocol[mcp]`
+- Entry points: `keep-mcp` CLI and `python -m keep.mcp`
+- MCP setup documentation in SKILL.md (KP-28)
+
+### Performance
+- MCP tools achieve **<60ms latency** vs 80-150s with skill-based approach (118x faster)
+
+### Changed
+- Minimum Python version raised to 3.10 (MCP SDK requirement)
+- CI matrix updated to test Python 3.10, 3.11, 3.12, 3.13
+
 ## [0.4.0] — 2026-02-03
 
 ### Added
@@ -97,7 +117,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/CLCrawford-dev/keep-protocol/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/CLCrawford-dev/keep-protocol/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/CLCrawford-dev/keep-protocol/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/CLCrawford-dev/keep-protocol/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/CLCrawford-dev/keep-protocol/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/CLCrawford-dev/keep-protocol/compare/v0.1.1...v0.3.0
