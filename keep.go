@@ -21,7 +21,7 @@ import (
 
 const (
 	MaxPacketSize = 65536
-	ServerVersion = "0.3.0"
+	ServerVersion = "0.5.0"
 	MaxScarEntries = 1000
 )
 
