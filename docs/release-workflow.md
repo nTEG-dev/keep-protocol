@@ -124,6 +124,16 @@ Always set:
 CLAWHUB_REGISTRY=https://auth.clawdhub.com
 ```
 
+### ClawHub skill invisible after publish
+If publish says OK but skill doesn't appear in search:
+```bash
+# Check if soft-deleted and restore
+CLAWHUB_REGISTRY=https://auth.clawdhub.com npx clawhub undelete keep-protocol --yes
+
+# Verify visibility
+CLAWHUB_REGISTRY=https://auth.clawdhub.com npx clawhub inspect keep-protocol
+```
+
 ### ClawHub login
 ```bash
 # Interactive (opens browser)
